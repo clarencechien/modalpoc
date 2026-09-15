@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>瑞光路 186 號街區 · 360° 檢視</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { color-scheme: light; --bg:#eef2f6; --fg:#1b2330; --muted:#5b6675; --panel:rgba(255,255,255,.86); --accent:#0b6bcb; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui, -apple-system, "Noto Sans TC", sans-serif; }
+  #app { position:fixed; inset:0; }
+  canvas { display:block; width:100%; height:100%; }
+  .panel { position:fixed; backdrop-filter:blur(8px); background:var(--panel); border-radius:12px; box-shadow:0 4px 18px rgba(0,0,0,.12); padding:10px 12px; }
+  #top { top:calc(env(safe-area-inset-top,0px) + 12px); left:12px; right:12px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  #top h1 { font-size:15px; margin:0 8px 0 0; font-weight:600; }
+  button { border:1px solid #cfd6df; background:#fff; color:var(--fg); border-radius:8px; padding:6px 10px; cursor:pointer; font:inherit; }
+  button:hover { border-color:var(--accent); color:var(--accent); }
+  button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  #bottom { bottom:calc(env(safe-area-inset-bottom,0px) + 12px); left:12px; right:12px; display:flex; flex-wrap:wrap; gap:6px 16px; align-items:center; font-size:12px; color:var(--muted); }
+  #status { position:fixed; inset:0; display:grid; place-items:center; font-size:15px; color:var(--muted); pointer-events:none; }
+  #status.hidden { display:none; }
+  kbd { font:11px ui-monospace, monospace; border:1px solid #cfd6df; border-radius:4px; padding:0 4px; background:#fff; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="top" class="panel">
+  <h1>瑞光路 186 號街區（台達電子總部）</h1>
+  <span id="views"></span>
+  <button id="orbit" class="on" title="自動 360° 環繞（空白鍵）">360° 環繞</button>
+  <button id="wire" title="顯示線框以檢查面數（W）">線框</button>
+</div>
+<div id="bottom" class="panel">
+  <span id="stats">載入中…</span>
+  <span id="attrib"></span>
+  <span>拖曳旋轉 · 滾輪縮放 · 右鍵平移 · <kbd>1</kbd>–<kbd>6</kbd> 切換視角</span>
+</div>
+<div id="status">載入 scene.glb…</div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/build/three.module.min.js", "three/addons/": "./vendor/three/examples/jsm/" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const params = new URLSearchParams(location.search);
+const GLB = params.get('glb') || './assets/scene.glb';
+const STATS = params.get('stats') || './assets/stats.json';
+
+// --- renderer (threejs-renderers: cap DPR, sRGB output, no tone mapping for pre-baked textures)
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NoToneMapping;
+document.getElementById('app').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xdfe7f0);
+scene.fog = new THREE.Fog(0xdfe7f0, 600, 1600);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 5000);
+camera.position.set(-260, 170, 260);
+
+// --- controls (threejs-controls: damping, keep above the ground, sane zoom range)
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.maxPolarAngle = Math.PI / 2 - 0.02;
+controls.minDistance = 8;
+controls.maxDistance = 1200;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.6;
+controls.target.set(0, 10, 0);
+
+// --- load (threejs-loaders: LoadingManager progress, dispose on replace)
+const status = document.getElementById('status');
+const manager = new THREE.LoadingManager();
+manager.onProgress = (url, loaded, total) => { status.textContent = `載入中 ${loaded}/${total}`; };
+const loader = new GLTFLoader(manager);
+const maxAniso = renderer.capabilities.getMaxAnisotropy();
+const materialCache = new Map();
+let root = null, presets = [];
+
+function unlitMaterial(src) {
+  // threejs-materials / threejs-textures: baked lighting -> MeshBasicMaterial, sRGB colour map, shared per texture
+  const tex = src.emissiveMap || src.map;
+  const key = tex ? tex.uuid : 'flat:' + (src.emissive || src.color).getHexString();
+  if (materialCache.has(key)) return materialCache.get(key);
+  if (tex) {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = maxAniso;
+    tex.generateMipmaps = true;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+  }
+  const m = new THREE.MeshBasicMaterial({ map: tex || null, color: tex ? 0xffffff : (src.emissive && src.emissive.getHex() ? src.emissive : src.color), side: THREE.FrontSide });
+  materialCache.set(key, m);
+  return m;
+}
+
+loader.load(GLB, (gltf) => {
+  root = gltf.scene;
+  let tris = 0, meshes = 0;
+  root.traverse((o) => {
+    if (o.isMesh) {
+      meshes++;
+      const g = o.geometry;
+      tris += g.index ? g.index.count / 3 : g.attributes.position.count / 3;
+      o.material = Array.isArray(o.material) ? o.material.map(unlitMaterial) : unlitMaterial(o.material);
+      o.frustumCulled = true;
+    }
+  });
+  scene.add(root);
+
+  // preset views come from the cameras exported by Blender (threejs-camera)
+  presets = (gltf.cameras || []).map((c) => {
+    c.updateMatrixWorld(true);
+    const pos = new THREE.Vector3().setFromMatrixPosition(c.matrixWorld);
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(new THREE.Quaternion().setFromRotationMatrix(c.matrixWorld)).normalize();
+    // aim at the ground plane (y = 0) when looking down, else 120 m ahead
+    const t = dir.y < -0.05 ? -pos.y / dir.y : 120;
+    return { name: c.name.replace(/^View_/, ''), pos, target: pos.clone().addScaledVector(dir, Math.min(t, 900)), fov: c.fov };  // fallback only
+  });
+  buildViewButtons();
+  if (presets.length) goTo(0, true);
+  status.classList.add('hidden');
+
+  fetch(STATS).then(r => r.ok ? r.json() : null).then((s) => {
+    if (s && Array.isArray(s.views) && s.views.length) {
+      // authoritative presets computed in Blender (glTF Y-up metres)
+      presets = s.views.map(v => ({ name: v.name, pos: new THREE.Vector3(...v.pos), target: new THREE.Vector3(...v.target), fov: v.fov }));
+      buildViewButtons();
+      goTo(0, true);
+    }
+    const parts = [`${meshes} mesh · ${Math.round(tris).toLocaleString()} 三角形`];
+    if (s) {
+      if (s.tris_before) parts.push(`bake 前 ${s.tris_before.toLocaleString()} → 後 ${s.tris_after.toLocaleString()}`);
+      if (s.glb_bytes) parts.push(`${(s.glb_bytes / 1e6).toFixed(1)} MB`);
+      if (s.device) parts.push(`Modal ${s.device}${s.seconds_total ? ` ${s.seconds_total}s` : ''}`);
+      document.getElementById('attrib').textContent = (s.attribution || []).join(' · ');
+    }
+    document.getElementById('stats').textContent = parts.join(' · ');
+  }).catch(() => {});
+}, undefined, (err) => { status.textContent = `無法載入 ${GLB}：${err.message || err}（請用 http 伺服器開啟，例如 python -m http.server）`; });
+
+// --- view presets + animated transitions
+const viewsEl = document.getElementById('views');
+function buildViewButtons() {
+  window.__presets = presets; window.__camera = camera; window.__controls = controls;
+  viewsEl.innerHTML = '';
+  presets.forEach((p, i) => {
+    const b = document.createElement('button');
+    b.textContent = `${i + 1} ${p.name}`;
+    b.addEventListener('click', () => goTo(i));
+    viewsEl.appendChild(b);
+  });
+}
+let anim = null;
+function goTo(i, instant = false) {
+  const p = presets[i];
+  if (!p) return;
+  [...viewsEl.children].forEach((b, k) => b.classList.toggle('on', k === i));
+  if (instant) { camera.position.copy(p.pos); controls.target.copy(p.target); camera.fov = p.fov; camera.updateProjectionMatrix(); return; }
+  anim = { t: 0, t0: performance.now(), dur: 1200, from: camera.position.clone(), to: p.pos.clone(), tf: controls.target.clone(), tt: p.target.clone(), f0: camera.fov, f1: p.fov };
+}
+
+// --- UI
+const orbitBtn = document.getElementById('orbit');
+const wireBtn = document.getElementById('wire');
+function toggleOrbit() { controls.autoRotate = !controls.autoRotate; orbitBtn.classList.toggle('on', controls.autoRotate); }
+function toggleWire() { const on = wireBtn.classList.toggle('on'); materialCache.forEach(m => { m.wireframe = on; }); }
+orbitBtn.addEventListener('click', toggleOrbit);
+wireBtn.addEventListener('click', toggleWire);
+window.addEventListener('keydown', (e) => {
+  if (e.key === ' ') { e.preventDefault(); toggleOrbit(); }
+  else if (e.key.toLowerCase() === 'w') toggleWire();
+  else if (/^[1-9]$/.test(e.key)) goTo(+e.key - 1);
+});
+controls.addEventListener('start', () => { if (controls.autoRotate) { controls.autoRotate = false; orbitBtn.classList.remove('on'); } anim = null; });
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+const ease = (x) => 1 - Math.pow(1 - x, 3);
+renderer.setAnimationLoop(() => {
+  if (anim) {
+    anim.t = Math.min(1, (performance.now() - anim.t0) / anim.dur);  // time-based, frame-rate independent
+    const k = ease(anim.t);
+    camera.position.lerpVectors(anim.from, anim.to, k);
+    controls.target.lerpVectors(anim.tf, anim.tt, k);
+    camera.fov = anim.f0 + (anim.f1 - anim.f0) * k;
+    camera.updateProjectionMatrix();
+    if (anim.t >= 1) anim = null;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

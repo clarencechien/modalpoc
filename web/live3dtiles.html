@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>瑞光路 186 號 · Google Photorealistic 3D Tiles（串流）</title>
+<!-- CesiumJS is Google's documented renderer for Photorealistic 3D Tiles (attribution shown on screen). -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cesium/1.120.0/Widgets/widgets.css">
+<style>
+  html, body, #cesiumContainer { margin:0; height:100%; width:100%; overflow:hidden; font: 14px system-ui, "Noto Sans TC", sans-serif; }
+  #ui { position:fixed; top:12px; left:12px; z-index:10; background:rgba(255,255,255,.9); border-radius:10px; padding:10px 12px; box-shadow:0 4px 18px rgba(0,0,0,.15); max-width:min(92vw, 520px); }
+  #ui input { width:100%; box-sizing:border-box; padding:6px 8px; margin:6px 0; border:1px solid #cfd6df; border-radius:6px; font:inherit; }
+  #ui button { padding:6px 10px; margin:2px 4px 2px 0; border:1px solid #cfd6df; border-radius:6px; background:#fff; cursor:pointer; font:inherit; }
+  #msg { color:#a33; font-size:12px; white-space:pre-wrap; }
+  small { color:#5b6675; }
+</style>
+</head>
+<body>
+<div id="cesiumContainer"></div>
+<div id="ui">
+  <b>Google Photorealistic 3D Tiles · 瑞光路 186 號</b><br>
+  <small>每次載入 root.json = 1 個計費事件（每月前 1,000 次免費）。Key 需啟用 Map Tiles API 並限制 HTTP referrer。</small>
+  <input id="key" placeholder="Google Maps API key（或用 ?key=... 帶入）">
+  <span id="views"></span>
+  <button id="load">載入</button>
+  <button id="orbit">360° 環繞</button>
+  <div id="msg"></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cesium/1.120.0/Cesium.js"></script>
+<script>
+const SITE = { lat: 25.0740, lon: 121.5775, half: 150 };
+const q = new URLSearchParams(location.search);
+const keyInput = document.getElementById('key');
+keyInput.value = q.get('key') || localStorage.getItem('gmaps_key') || '';
+const msg = document.getElementById('msg');
+
+Cesium.Ion.defaultAccessToken = undefined;  // no Cesium ion needed
+const viewer = new Cesium.Viewer('cesiumContainer', {
+  imageryProvider: false, baseLayerPicker: false, geocoder: false, homeButton: false, sceneModePicker: false,
+  navigationHelpButton: false, timeline: false, animation: false, infoBox: false, selectionIndicator: false,
+  requestRenderMode: false, terrain: undefined,
+});
+viewer.scene.globe.show = false;            // Google tiles include terrain
+viewer.scene.skyAtmosphere.show = true;
+viewer.scene.screenSpaceCameraController.minimumZoomDistance = 5;
+
+let tileset = null, orbiting = false;
+const center = Cesium.Cartesian3.fromDegrees(SITE.lon, SITE.lat, 15);
+
+async function load() {
+  const key = keyInput.value.trim();
+  if (!key) { msg.textContent = '請輸入 API key'; return; }
+  localStorage.setItem('gmaps_key', key);
+  msg.textContent = '載入中…';
+  try {
+    if (tileset) viewer.scene.primitives.remove(tileset);
+    tileset = await Cesium.Cesium3DTileset.fromUrl(`https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(key)}`, {
+      showCreditsOnScreen: true,               // required by Google's attribution policy
+      maximumScreenSpaceError: 8,              // lower = sharper (more tiles)
+      skipLevelOfDetail: true,
+    });
+    viewer.scene.primitives.add(tileset);
+    msg.textContent = '';
+    goTo(0);
+  } catch (e) {
+    msg.textContent = `載入失敗：${e.message || e}\n常見原因：Map Tiles API 未啟用、key 的 API 限制未包含 Map Tiles API、referrer 限制不符。`;
+  }
+}
+
+// preset angles around the block (compass heading, pitch, range)
+const PRESETS = [
+  ['SW', 45, -35, 520], ['SE', -45, -35, 520], ['NE', -135, -35, 520], ['NW', 135, -35, 520],
+  ['Top', 0, -89, 900], ['Street', 20, -8, 140],
+];
+function goTo(i) {
+  const [, heading, pitch, range] = PRESETS[i];
+  viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(center, 1), {
+    duration: 1.2,
+    offset: new Cesium.HeadingPitchRange(Cesium.Math.toRadians(heading), Cesium.Math.toRadians(pitch), range),
+  });
+}
+PRESETS.forEach(([name], i) => {
+  const b = document.createElement('button'); b.textContent = `${i + 1} ${name}`; b.onclick = () => goTo(i);
+  document.getElementById('views').appendChild(b);
+});
+document.getElementById('load').onclick = load;
+document.getElementById('orbit').onclick = () => {
+  orbiting = !orbiting;
+  if (orbiting) viewer.camera.lookAt(center, new Cesium.HeadingPitchRange(viewer.camera.heading, viewer.camera.pitch, 500));
+  else viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+};
+viewer.clock.onTick.addEventListener(() => { if (orbiting) viewer.camera.rotateRight(0.0025); });
+window.addEventListener('keydown', (e) => { if (/^[1-6]$/.test(e.key)) goTo(+e.key - 1); });
+if (keyInput.value) load();
+</script>
+</body>
+</html>

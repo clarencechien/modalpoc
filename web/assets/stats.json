@@ -1,0 +1,127 @@
+{
+  "mode": "opendata",
+  "half_size_m": 150.0,
+  "origin": [
+    25.074,
+    121.5775,
+    0.0
+  ],
+  "device": "OPTIX",
+  "hero": {
+    "osm_id": "w343901574",
+    "height_m": 30.7,
+    "tris": 7373,
+    "floors": 9,
+    "pv_panels": 266
+  },
+  "tris_before": 17204,
+  "tris_after": 17204,
+  "objects": [
+    "Hero",
+    "Buildings",
+    "Ground"
+  ],
+  "glb_bytes": 5163952,
+  "cameras": [
+    "View_SW",
+    "View_SE",
+    "View_NE",
+    "View_NW",
+    "View_Top",
+    "View_Street"
+  ],
+  "views": [
+    {
+      "name": "SW",
+      "pos": [
+        -213.75,
+        165.0,
+        213.75
+      ],
+      "target": [
+        16.76,
+        0.0,
+        -16.76
+      ],
+      "fov": 58.7
+    },
+    {
+      "name": "SE",
+      "pos": [
+        213.75,
+        165.0,
+        213.75
+      ],
+      "target": [
+        -16.76,
+        0.0,
+        -16.76
+      ],
+      "fov": 58.7
+    },
+    {
+      "name": "NE",
+      "pos": [
+        213.75,
+        165.0,
+        -213.75
+      ],
+      "target": [
+        -16.76,
+        0.0,
+        16.76
+      ],
+      "fov": 58.7
+    },
+    {
+      "name": "NW",
+      "pos": [
+        -213.75,
+        165.0,
+        -213.75
+      ],
+      "target": [
+        16.76,
+        0.0,
+        16.76
+      ],
+      "fov": 58.7
+    },
+    {
+      "name": "Top",
+      "pos": [
+        0.0,
+        480.0,
+        1.0
+      ],
+      "target": [
+        0.0,
+        0.0,
+        -0.02
+      ],
+      "fov": 48.5
+    },
+    {
+      "name": "Street",
+      "pos": [
+        -52.5,
+        2.0,
+        135.0
+      ],
+      "target": [
+        0.0,
+        2.0,
+        0.0
+      ],
+      "fov": 58.7
+    }
+  ],
+  "attribution": [
+    "建物輪廓 © OpenStreetMap contributors (ODbL)",
+    "正射影像 © 內政部國土測繪中心 (NLSC), 政府資料開放授權"
+  ],
+  "seconds": 126.4,
+  "run_id": "20260915-032904",
+  "seconds_fetch": 0.0,
+  "seconds_total": 135.3
+}

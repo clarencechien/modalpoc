@@ -1,0 +1,5 @@
+{
+  "type": "FeatureCollection",
+  "_comment": "Hand-traced WGS84 footprints for buildings missing from OSM. properties.height in metres. Coordinates are [lon, lat]. Empty by default.",
+  "features": []
+}
