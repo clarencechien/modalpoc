@@ -19,6 +19,9 @@ docs/google-api-handbook.md   必須開通的 Google API、Key 限制、費用�
 .claude/skills/               three.js / Blender→web skills（見該目錄 README）
 ```
 
+![SW 視角](docs/img/preview_View_SW.png)
+![街景視角](docs/img/preview_View_Street.png)
+
 ## 快速開始
 
 ```bash
