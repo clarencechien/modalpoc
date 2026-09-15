@@ -945,7 +945,9 @@ def main(argv):
         to_gltf = lambda v: [round(v.x, 2), round(v.z, 2), round(-v.y, 2)]  # Blender Z-up -> glTF Y-up
         stats["views"].append({"name": c.name.replace("View_", ""), "pos": to_gltf(pos), "target": to_gltf(tgt),
                                "fov": round(math.degrees(2 * math.atan(c.data.sensor_width / 2 / c.data.lens)), 1)})
-    stats["attribution"] = site.get("attribution", [])
+    stats["attribution"] = list(site.get("attribution", []))
+    if a.mode == "nlsc":
+        stats["attribution"].append("三維建物模型 © 內政部國土測繪中心 多維度國家空間資訊服務平臺")
     stats["seconds"] = round(time.time() - T0, 1)
     (a.out / "stats.json").write_text(json.dumps(stats, ensure_ascii=False, indent=2), encoding="utf-8")
     log(f"exported {glb} ({stats['glb_bytes'] / 1e6:.1f} MB), tris {stats.get('tris_before')} -> {stats['tris_after']}")
