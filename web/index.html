@@ -148,6 +148,7 @@ loader.load(GLB, (gltf) => {
 // --- view presets + animated transitions
 const viewsEl = document.getElementById('views');
 function buildViewButtons() {
+  window.__presets = presets; window.__camera = camera; window.__controls = controls;
   viewsEl.innerHTML = '';
   presets.forEach((p, i) => {
     const b = document.createElement('button');
@@ -162,7 +163,7 @@ function goTo(i, instant = false) {
   if (!p) return;
   [...viewsEl.children].forEach((b, k) => b.classList.toggle('on', k === i));
   if (instant) { camera.position.copy(p.pos); controls.target.copy(p.target); camera.fov = p.fov; camera.updateProjectionMatrix(); return; }
-  anim = { t: 0, from: camera.position.clone(), to: p.pos.clone(), tf: controls.target.clone(), tt: p.target.clone(), f0: camera.fov, f1: p.fov };
+  anim = { t: 0, t0: performance.now(), dur: 1200, from: camera.position.clone(), to: p.pos.clone(), tf: controls.target.clone(), tt: p.target.clone(), f0: camera.fov, f1: p.fov };
 }
 
 // --- UI
@@ -191,7 +192,7 @@ resize();
 const ease = (x) => 1 - Math.pow(1 - x, 3);
 renderer.setAnimationLoop(() => {
   if (anim) {
-    anim.t = Math.min(1, anim.t + 1 / 60);
+    anim.t = Math.min(1, (performance.now() - anim.t0) / anim.dur);  // time-based, frame-rate independent
     const k = ease(anim.t);
     camera.position.lerpVectors(anim.from, anim.to, k);
     controls.target.lerpVectors(anim.tf, anim.tt, k);
