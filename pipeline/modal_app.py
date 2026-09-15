@@ -4,6 +4,7 @@
     modal run pipeline/modal_app.py --lat 25.0740 --lon 121.5775 --half-size 150
     modal run pipeline/modal_app.py --gpu none --samples 32          # CPU only
     modal run pipeline/modal_app.py --gpu l40s --samples 256         # bigger GPU (l4 | a10g | l40s | none)
+    modal run pipeline/modal_app.py --mode nlsc                      # 國土測繪中心 分棟版建物 (recommended)
     modal run pipeline/modal_app.py --mode google3d                  # needs Map Tiles API
 
 Outputs land in the Modal Volume `modalpoc-terrain-out` and are downloaded to
@@ -40,7 +41,7 @@ image = (
         "mkdir -p /opt/blender && tar -xJf /tmp/blender.tar.xz -C /opt/blender --strip-components=1 && rm /tmp/blender.tar.xz",
         "/opt/blender/blender --version",
     )
-    .pip_install("requests==2.32.3", "pillow==10.4.0")
+    .pip_install("requests==2.32.3", "pillow==10.4.0", "cryptography==43.0.1")
     .add_local_dir(str(PIPELINE_DIR), REMOTE_PIPELINE)
 )
 
@@ -49,6 +50,7 @@ out_volume = modal.Volume.from_name("modalpoc-terrain-out", create_if_missing=Tr
 cache_volume = modal.Volume.from_name("modalpoc-terrain-cache", create_if_missing=True)
 
 GOOGLE_SECRET = "google-maps-key"  # optional Modal secret with GOOGLE_MAPS_API_KEY (google3d mode)
+NLSC_TAIPEI_BUILDINGS = "https://3dtiles.nlsc.gov.tw/building/tiles3d/30/tileset.json"  # 臺北市分棟版建物模型
 
 
 def _run_blender(args: list[str], cwd: str) -> str:
@@ -94,6 +96,12 @@ def _build_impl(cfg: dict, site_files: dict | None = None) -> dict:
             "--samples", str(cfg["samples"]), "--target-tris", str(cfg["target_tris"])]
     if cfg.get("use_gpu"):
         args.append("--gpu")
+    if cfg["mode"] == "nlsc":
+        from fetch_tiles3d import fetch_tiles
+        from tls_tw import make_bundle
+        tiles_dir = work / "tiles"
+        fetch_tiles(cfg.get("nlsc_url") or NLSC_TAIPEI_BUILDINGS, cfg["lat"], cfg["lon"], cfg["half_size"], tiles_dir, verify=make_bundle())
+        args += ["--tiles", str(tiles_dir)]
     if cfg["mode"] == "google3d":
         from fetch_google3d import fetch_tiles
         key = os.environ.get("GOOGLE_MAPS_API_KEY") or cfg.get("google_key")
@@ -140,9 +148,10 @@ def build_cpu(cfg: dict, site_files: dict | None = None) -> dict:
 @app.local_entrypoint()
 def main(lat: float = 25.0740, lon: float = 121.5775, half_size: float = 150.0, zoom: int = 20,
          mode: str = "opendata", bake_res: int = 4096, ground_res: int = 4096, samples: int = 96,
-         target_tris: int = 80000, gpu: str = "L4", out: str = "web/assets", remote_fetch: bool = False):
+         target_tris: int = 80000, gpu: str = "L4", out: str = "web/assets", remote_fetch: bool = False,
+         nlsc_url: str = NLSC_TAIPEI_BUILDINGS):
     cfg = dict(lat=lat, lon=lon, half_size=half_size, zoom=zoom, mode=mode, bake_res=bake_res,
-               ground_res=ground_res, samples=samples, target_tris=target_tris, use_gpu=gpu.lower() != "none")
+               ground_res=ground_res, samples=samples, target_tris=target_tris, use_gpu=gpu.lower() != "none", nlsc_url=nlsc_url)
     fn = {"none": build_cpu, "l4": build_gpu, "a10g": build_gpu_a10g, "l40s": build_gpu_l40s}[gpu.lower()]
     site_files = None
     if not remote_fetch:

@@ -176,3 +176,19 @@ Modal 新帳號每月有免費額度（目前 US$30/月），這個專案的用�
   塔樓＋招牌），這個版本不含任何 Google 內容，可以公開發佈。
 - **條款**：Street View 影像同樣受 Map Tiles 政策約束（須顯示 copyright、不得儲存/離線使用），
   街景貼圖版本只保留在本機 `build/` 實驗，不進 repo、不上 Pages。
+
+
+## 6. 國土測繪中心三維建物（2026-09-15 實測，成功）
+
+- 入口：多維度國家空間資訊服務平臺 https://3dmaps.nlsc.gov.tw/ （藏識科技 PilotGaea 前端）。
+- 服務清單 API（前端 `DataHandlingPanel.js` 使用）：
+  - 3D Tiles：`https://3dtiles.nlsc.gov.tw/tiles3d/service`
+  - I3S：`https://i3s.nlsc.gov.tw/i3s/service`
+- 臺北市有兩個 3D Tiles 圖層：`/building/tiles3d/0/`（建物模型）與 `/building/tiles3d/30/`（**分棟版**）。
+  tileset 為 3D Tiles 1.1（`asset.version 1.1`、`contents[]`、sphere 包圍盒、`refine REPLACE`），內容為 GLB，
+  使用 `EXT_mesh_features` / `EXT_structural_metadata` / `EXT_texture_bound`（藏識自訂），每片 tile 帶 2 張 2048×4096 貼圖。
+- 瑞光路街區（半徑 150 m）：63 片 tile、165 MB、12.4 萬頂點；Blender 匯入後 2 萬個三角形，裁切後約 1 萬。
+  幾何是真實輪廓＋高度（台達總部的弧形量體、廣場圓亭都在），屋頂貼真實正射影像，立面是通用窗格貼圖。
+- 憑證：伺服器沒送 TWCA 中繼憑證（`TWCA Secure SSL Certification Authority`），一般 client 會報
+  `unable to get local issuer certificate`。`pipeline/tls_tw.py` 用憑證的 AIA 網址下載中繼憑證補鏈，驗證維持開啟。
+- 授權：平台公告「免費供應、免申請」的網路服務；正式發佈前請再確認該平台的使用條款並標示「內政部國土測繪中心」。
