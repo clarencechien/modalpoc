@@ -366,6 +366,45 @@ def near_poly(x, y, poly, tol=4.0) -> bool:
     return False
 
 
+def fit_arc(outer):
+    """Least-squares circle through the longest north-facing vertex chain of the footprint.
+    Returns the centre and the angular range (degrees, CCW from +X) from the east end to the west end;
+    the first short east-facing segment of the chain is skipped so the range matches the glass arc."""
+    poly = [tuple(p) for p in outer]
+    if ring_area(poly) < 0:
+        poly.reverse()
+    n = len(poly)
+    north = []
+    for i in range(n):
+        (x1, y1), (x2, y2) = poly[i], poly[(i + 1) % n]
+        ex, ey = x2 - x1, y2 - y1
+        north.append((-ex) / (math.hypot(ex, ey) + 1e-9) > 0.15)  # outward normal y for a CCW ring is -ex
+    best, cur = (0, 0), 0
+    for i in range(2 * n):
+        if north[i % n]:
+            cur += 1
+            if cur > best[0]:
+                best = (cur, i - cur + 1)
+        else:
+            cur = 0
+    run, s0 = best
+    chain = [poly[(s0 + k) % n] for k in range(run + 1)]
+    xs = [p[0] for p in chain]; ys = [p[1] for p in chain]
+    # algebraic circle fit
+    m = len(chain)
+    sx, sy = sum(xs), sum(ys); sxx, syy, sxy = sum(x * x for x in xs), sum(y * y for y in ys), sum(x * y for x, y in chain)
+    sxxx = sum(x ** 3 for x in xs); syyy = sum(y ** 3 for y in ys); sxyy = sum(x * y * y for x, y in chain); sxxy = sum(x * x * y for x, y in chain)
+    A = [[2 * sxx, 2 * sxy, sx], [2 * sxy, 2 * syy, sy], [2 * sx, 2 * sy, m]]
+    b = [sxxx + sxyy, sxxy + syyy, sxx + syy]
+    import numpy as np
+    cx, cy, _ = np.linalg.solve(np.array(A), np.array(b))
+    ang = [math.degrees(math.atan2(y - cy, x - cx)) for x, y in chain]
+    # skip the leading segment when it faces mostly east (short return before the arc proper)
+    if len(ang) > 3 and (ang[1] - ang[0]) > 15 and math.hypot(chain[1][0] - chain[0][0], chain[1][1] - chain[0][1]) < 16:
+        ang = ang[1:]
+    return {"cx": float(cx), "cy": float(cy), "theta0_deg": float(ang[0]), "theta1_deg": float(ang[-1])}
+
+
 def find_hero(site: dict, lat: float, lon: float):
     """Building containing (or nearest within 60 m to) the hero point."""
     from geo import lla_to_enu
@@ -674,7 +713,7 @@ def add_preset_cameras(half: float, focus_z=12.0, hero_xy=(25.0, 0.0)):
         "View_Top": (0.0, -1.0, half * 3.2),
         "View_Street": (hero_xy[0] - 62, hero_xy[1] - 12, 2.0),  # on the plaza west of the hero
         "View_HeroN": (hero_xy[0] + 10, hero_xy[1] + 110, 40.0),
-        "View_HeroPlaza": (hero_xy[0] - 70, hero_xy[1] + 25, 3.0),
+        "View_HeroPlaza": (hero_xy[0] - 40, hero_xy[1] + 18, 3.0),  # on the plaza west of the arc, north of the pavilion
     }
     for name, loc in presets.items():
         cam = bpy.data.cameras.new(name)
@@ -782,6 +821,7 @@ def main(argv):
     ap.add_argument("--hero-lon", type=float, default=121.57772)
     ap.add_argument("--hero-res", type=int, default=4096)
     ap.add_argument("--no-hero", action="store_true")
+    ap.add_argument("--no-arc-photo", action="store_true", help="nlsc: do not drape the Commons photo on the arc")
     a = ap.parse_args(argv)
 
     site = json.loads(a.site.read_text(encoding="utf-8"))
@@ -861,9 +901,26 @@ def main(argv):
             bpy.ops.object.mode_set(mode="OBJECT")
             hero = next(o for o in bpy.context.selected_objects if o != blds)
             hero.name = "Hero"
-            # photo-informed facade on the walls; keep the NLSC ortho texture on roofs
+            # photo-informed facade on the walls; keep the NLSC ortho texture on roofs.
+            # If the Commons photo is available, drape its rectified curtain wall onto the arc.
             from hero import tile_glass_material
-            hero.data.materials.append(tile_glass_material("HeroFacade"))
+            arc_photo = None
+            photo = Path(__file__).resolve().parent / "data" / "delta_hq_commons_2011.jpg"
+            tex_path = a.out / "facade_arc.jpg"
+            if photo.exists() and not a.no_arc_photo and not tex_path.exists():
+                try:  # needs PIL/numpy: available with the bpy wheel, not inside a portable Blender
+                    from photo_facade import rectify
+                    rectify(photo, tex_path)
+                except Exception as e:
+                    log(f"arc photo rectification skipped ({e}); run photo_facade.py beforehand")
+            if tex_path.exists() and not a.no_arc_photo:
+                from photo_facade import Z_TOP, Z_BOT
+                arc = fit_arc(hero_b["outer"])
+                arc_photo = {"image": tex_path, **arc, "z_bot": Z_BOT, "z_top": Z_TOP}
+                stats["arc_photo"] = {k: (str(v) if isinstance(v, Path) else v) for k, v in arc_photo.items()}
+                stats.setdefault("attribution", [])
+                log(f"arc photo mapping: centre=({arc['cx']:.1f},{arc['cy']:.1f}) theta {arc['theta0_deg']:.0f}..{arc['theta1_deg']:.0f} deg")
+            hero.data.materials.append(tile_glass_material("HeroFacade", arc_photo=arc_photo))
             wall_idx = len(hero.data.materials) - 1
             for poly in hero.data.polygons:
                 if poly.normal.z < 0.5:
@@ -948,6 +1005,8 @@ def main(argv):
     stats["attribution"] = list(site.get("attribution", []))
     if a.mode == "nlsc":
         stats["attribution"].append("三維建物模型 © 內政部國土測繪中心 多維度國家空間資訊服務平臺")
+        if stats.get("arc_photo"):
+            stats["attribution"].append("台達總部帷幕貼圖：Solomon203, Wikimedia Commons, CC BY-SA 3.0")
     stats["seconds"] = round(time.time() - T0, 1)
     (a.out / "stats.json").write_text(json.dumps(stats, ensure_ascii=False, indent=2), encoding="utf-8")
     log(f"exported {glb} ({stats['glb_bytes'] / 1e6:.1f} MB), tris {stats.get('tris_before')} -> {stats['tris_after']}")

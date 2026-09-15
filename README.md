@@ -22,7 +22,8 @@ docs/google-api-handbook.md   必須開通的 Google API、Key 限制、費用�
 ![SW 視角](docs/img/preview_View_SW.png)
 ![台達總部（NLSC 幾何 + 照片修正材質）](docs/img/preview_View_HeroN.png)
 
-`web/assets/scene.glb` 現在是 **NLSC 分棟版建物** 的成品（`--mode nlsc`）；OSM/LOD1 版保留為
+`web/assets/scene.glb` 現在是 **NLSC 分棟版建物** 的成品（`--mode nlsc`），台達總部的弧形帷幕貼的是
+Wikimedia Commons 照片（Solomon203，CC BY-SA 3.0）經 `pipeline/photo_facade.py` 圓柱面校正後的貼圖；OSM/LOD1 版保留為
 `web/assets/scene_opendata.glb`，在 viewer 用 `index.html?glb=assets/scene_opendata.glb&stats=assets/stats_opendata.json` 切換。
 
 ## 快速開始

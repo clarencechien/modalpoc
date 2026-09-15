@@ -85,9 +85,12 @@ def glass_material(name="HeroGlass"):
     return m
 
 
-def tile_glass_material(name="HeroFacade", glass_floors=7):
+def tile_glass_material(name="HeroFacade", glass_floors=7, arc_photo: dict | None = None):
     """Delta HQ look (Commons photo 2011): pink-brown granite tile with punched windows; the
-    north-facing arc is a teal curtain wall with dark horizontal bands, up to `glass_floors`."""
+    north-facing arc is a teal curtain wall with dark horizontal bands, up to `glass_floors`.
+    arc_photo = {"image": path, "cx", "cy", "theta0_deg", "theta1_deg", "z_bot", "z_top"} maps the
+    rectified Commons photo (photo_facade.py) onto the arc by angle around its centre (U) and height (V);
+    outside the photo's range the procedural curtain wall remains."""
     m = bpy.data.materials.new(name)
     m.use_nodes = True
     nt = m.node_tree
@@ -132,10 +135,27 @@ def tile_glass_material(name="HeroFacade", glass_floors=7):
     band_c = nt.nodes.new("ShaderNodeRGB"); band_c.outputs[0].default_value = (0.04, 0.16, 0.16, 1)
     glass_facade = nt.nodes.new("ShaderNodeMix"); glass_facade.data_type = "RGBA"
     nt.links.new(dark, glass_facade.inputs["Factor"]); nt.links.new(glass_c.outputs[0], glass_facade.inputs[6]); nt.links.new(band_c.outputs[0], glass_facade.inputs[7])
+    glass_out = glass_facade.outputs[2]
+    if arc_photo:
+        # U = angle around the arc centre, V = height between the bottom band and the parapet
+        img = bpy.data.images.load(str(arc_photo["image"]), check_existing=True); img.colorspace_settings.name = "sRGB"
+        dx = M("SUBTRACT", sep.outputs["X"], float(arc_photo["cx"])); dy = M("SUBTRACT", sep.outputs["Y"], float(arc_photo["cy"]))
+        th = M("ARCTAN2", dy, dx)  # radians, -pi..pi
+        t0, t1 = math.radians(arc_photo["theta0_deg"]), math.radians(arc_photo["theta1_deg"])
+        u = M("DIVIDE", M("SUBTRACT", th, t0), t1 - t0)
+        v = M("DIVIDE", M("SUBTRACT", sep.outputs["Z"], float(arc_photo["z_bot"])), float(arc_photo["z_top"]) - float(arc_photo["z_bot"]))
+        comb = nt.nodes.new("ShaderNodeCombineXYZ"); nt.links.new(u, comb.inputs["X"]); nt.links.new(v, comb.inputs["Y"])
+        tex = nt.nodes.new("ShaderNodeTexImage"); tex.image = img; tex.extension = "CLIP"; tex.interpolation = "Cubic"
+        nt.links.new(comb.outputs[0], tex.inputs["Vector"])
+        inside = M("MULTIPLY", M("MULTIPLY", M("GREATER_THAN", u, 0.0), M("LESS_THAN", u, 1.0)),
+                   M("MULTIPLY", M("GREATER_THAN", v, 0.0), M("LESS_THAN", v, 1.0)))
+        pm = nt.nodes.new("ShaderNodeMix"); pm.data_type = "RGBA"
+        nt.links.new(inside, pm.inputs["Factor"]); nt.links.new(glass_facade.outputs[2], pm.inputs[6]); nt.links.new(tex.outputs["Color"], pm.inputs[7])
+        glass_out = pm.outputs[2]
     # --- selector: north-facing (ny > 0.15) and below glass_floors
     is_glass = M("MULTIPLY", M("GREATER_THAN", nsep.outputs["Y"], 0.15), M("LESS_THAN", sep.outputs["Z"], glass_floors * FLOOR_H))
     final = nt.nodes.new("ShaderNodeMix"); final.data_type = "RGBA"
-    nt.links.new(is_glass, final.inputs["Factor"]); nt.links.new(tile_facade.outputs[2], final.inputs[6]); nt.links.new(glass_facade.outputs[2], final.inputs[7])
+    nt.links.new(is_glass, final.inputs["Factor"]); nt.links.new(tile_facade.outputs[2], final.inputs[6]); nt.links.new(glass_out, final.inputs[7])
     nt.links.new(final.outputs[2], bsdf.inputs["Base Color"])
     rough = nt.nodes.new("ShaderNodeMix"); rough.data_type = "FLOAT"; rough.inputs[2].default_value = 0.7; rough.inputs[3].default_value = 0.12
     nt.links.new(M("MAXIMUM", is_glass, win), rough.inputs["Factor"]); nt.links.new(rough.outputs[0], bsdf.inputs["Roughness"])

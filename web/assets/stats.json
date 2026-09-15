@@ -8,6 +8,21 @@
   ],
   "device": "OPTIX",
   "nlsc_ground_offset_m": 6.82,
+  "arc_photo": {
+    "image": "/out/20260915-051959/out/facade_arc.jpg",
+    "cx": 42.308154763232864,
+    "cy": 0.41087623419719516,
+    "theta0_deg": 59.72638990027593,
+    "theta1_deg": 159.0007232039004,
+    "z_bot": 3.4,
+    "z_top": 24.0
+  },
+  "attribution": [
+    "建物輪廓 © OpenStreetMap contributors (ODbL)",
+    "正射影像 © 內政部國土測繪中心 (NLSC), 政府資料開放授權",
+    "三維建物模型 © 內政部國土測繪中心 多維度國家空間資訊服務平臺",
+    "台達總部帷幕貼圖：Solomon203, Wikimedia Commons, CC BY-SA 3.0"
+  ],
   "hero": {
     "osm_id": "w343901574",
     "source": "nlsc",
@@ -20,7 +35,7 @@
     "Buildings",
     "Ground"
   ],
-  "glb_bytes": 4125004,
+  "glb_bytes": 4107708,
   "cameras": [
     "View_SW",
     "View_SE",
@@ -133,25 +148,20 @@
     {
       "name": "HeroPlaza",
       "pos": [
-        -45.03,
+        -15.03,
         3.0,
-        -29.95
+        -22.95
       ],
       "target": [
-        67.98,
+        24.97,
         3.0,
-        10.41
+        -4.95
       ],
       "fov": 58.7
     }
   ],
-  "attribution": [
-    "建物輪廓 © OpenStreetMap contributors (ODbL)",
-    "正射影像 © 內政部國土測繪中心 (NLSC), 政府資料開放授權",
-    "三維建物模型 © 內政部國土測繪中心 多維度國家空間資訊服務平臺"
-  ],
-  "seconds": 141.3,
-  "run_id": "20260915-044147",
+  "seconds": 138.6,
+  "run_id": "20260915-051959",
   "seconds_fetch": 0.0,
-  "seconds_total": 193.1
+  "seconds_total": 184.9
 }

@@ -192,3 +192,21 @@ Modal 新帳號每月有免費額度（目前 US$30/月），這個專案的用�
 - 憑證：伺服器沒送 TWCA 中繼憑證（`TWCA Secure SSL Certification Authority`），一般 client 會報
   `unable to get local issuer certificate`。`pipeline/tls_tw.py` 用憑證的 AIA 網址下載中繼憑證補鏈，驗證維持開啟。
 - 授權：平台公告「免費供應、免申請」的網路服務；正式發佈前請再確認該平台的使用條款並標示「內政部國土測繪中心」。
+
+
+## 7. Commons 照片貼上弧形帷幕（2026-09-15）
+
+- 來源：`File:Delta Electronics headquarters 20110201.jpg`，Solomon203，CC BY-SA 3.0（`pipeline/data/delta_hq_commons_2011.json` 有完整出處）。
+- 方法（`pipeline/photo_facade.py`）：把弧形帷幕當垂直圓柱面：水平方向以 sin(角度) 對應照片 x（弦投影），
+  垂直方向逐欄在手選的「女兒牆上緣曲線」與「一樓上緣曲線」之間線性取樣，展開成 2048×768 的平面貼圖。
+- 貼回（`pipeline/hero.py` `tile_glass_material(arc_photo=…)`）：U = 著色點繞弧心的角度（弧心由 OSM 輪廓北向頂點鏈最小平方擬合，
+  圓心 (42.3, 0.4)、半徑 30.8 m、60°→159°），V = (z − 3.4) / (24 − 3.4)；範圍外回到程序化帷幕。
+- 授權：衍生貼圖為 CC BY-SA 3.0，viewer 底部已標示作者與授權；整個 `scene.glb` 因含此貼圖，公開時應一併標示。
+
+### 為什麼 Google 街景不能用同樣方法？
+
+1. **條款**：Street View 屬 Map Tiles API 內容，政策禁止儲存、離線使用與衍生（見第 3 節）；bake 進公開的 GLB 就違反。
+2. **技術**：街景是全景，要先把台達那一段投影成透視圖再校正，本身可做；但這一帶的街景全景前方有整排行道樹、
+   路燈、車輛，遮蔽比例高；且 metadata 只有經緯度與 heading，沒有精確位姿與深度，投影到幾何上會把樹和天空糊上牆。
+   Commons 那張是站在對街、正對帷幕、沒有遮蔽的單張照片，才能用兩條曲線就校正好。
+3. 若只做內部實驗，同樣的 `photo_facade.py` 也能吃街景透視裁圖，只是不能發佈。
