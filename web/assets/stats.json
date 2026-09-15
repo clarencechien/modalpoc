@@ -10,25 +10,27 @@
   "hero": {
     "osm_id": "w343901574",
     "height_m": 30.7,
-    "tris": 7373,
+    "tris": 7065,
     "floors": 9,
     "pv_panels": 266
   },
-  "tris_before": 17204,
-  "tris_after": 17204,
+  "tris_before": 16896,
+  "tris_after": 16896,
   "objects": [
     "Hero",
     "Buildings",
     "Ground"
   ],
-  "glb_bytes": 5163952,
+  "glb_bytes": 5351120,
   "cameras": [
     "View_SW",
     "View_SE",
     "View_NE",
     "View_NW",
     "View_Top",
-    "View_Street"
+    "View_Street",
+    "View_HeroN",
+    "View_HeroPlaza"
   ],
   "views": [
     {
@@ -109,9 +111,37 @@
         135.0
       ],
       "target": [
-        0.0,
+        -9.01,
         2.0,
-        0.0
+        23.16
+      ],
+      "fov": 58.7
+    },
+    {
+      "name": "HeroN",
+      "pos": [
+        34.97,
+        40.0,
+        -114.95
+      ],
+      "target": [
+        19.59,
+        0.0,
+        54.28
+      ],
+      "fov": 58.7
+    },
+    {
+      "name": "HeroPlaza",
+      "pos": [
+        -45.03,
+        3.0,
+        -29.95
+      ],
+      "target": [
+        67.98,
+        3.0,
+        10.41
       ],
       "fov": 58.7
     }
@@ -120,8 +150,8 @@
     "建物輪廓 © OpenStreetMap contributors (ODbL)",
     "正射影像 © 內政部國土測繪中心 (NLSC), 政府資料開放授權"
   ],
-  "seconds": 126.4,
-  "run_id": "20260915-032904",
+  "seconds": 128.6,
+  "run_id": "20260915-040314",
   "seconds_fetch": 0.0,
-  "seconds_total": 135.3
+  "seconds_total": 139.5
 }
