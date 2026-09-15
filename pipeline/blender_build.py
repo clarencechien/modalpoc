@@ -623,7 +623,7 @@ def clip_to_square(ob, half: float):
 # ----------------------------------------------------------------------------- cameras / preview
 
 
-def add_preset_cameras(half: float, focus_z=12.0):
+def add_preset_cameras(half: float, focus_z=12.0, hero_xy=(25.0, 0.0)):
     """Six named cameras exported with the GLB; the viewer offers them as preset angles."""
     cams = []
     r = half * 1.9
@@ -634,6 +634,8 @@ def add_preset_cameras(half: float, focus_z=12.0):
         "View_NW": (-r * 0.75, r * 0.75, half * 1.1),
         "View_Top": (0.0, -1.0, half * 3.2),
         "View_Street": (-half * 0.35, -half * 0.9, 2.0),
+        "View_HeroN": (hero_xy[0] + 10, hero_xy[1] + 110, 40.0),
+        "View_HeroPlaza": (hero_xy[0] - 70, hero_xy[1] + 25, 3.0),
     }
     for name, loc in presets.items():
         cam = bpy.data.cameras.new(name)
@@ -642,6 +644,8 @@ def add_preset_cameras(half: float, focus_z=12.0):
         ob = link(bpy.data.objects.new(name, cam))
         ob.location = loc
         target = Vector((0, 0, focus_z if name != "View_Street" else 2.0))  # street: look horizontally (OrbitControls clamps polar angle)
+        if name.startswith("View_Hero"):
+            target = Vector((hero_xy[0], hero_xy[1], 14.0 if name == "View_HeroN" else 3.0))
         ob.rotation_euler = (target - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
         cams.append(ob)
     bpy.context.scene.camera = cams[0]
@@ -794,7 +798,11 @@ def main(argv):
         bpy.data.objects.remove(hi)
         export_objs = [lo]
 
-    cams = add_preset_cameras(half)
+    hero_xy = (25.0, 0.0)
+    if stats.get("hero"):
+        hb = next(b for b in site["buildings"] if b["id"] == stats["hero"]["osm_id"])
+        hero_xy = (sum(p[0] for p in hb["outer"]) / len(hb["outer"]), sum(p[1] for p in hb["outer"]) / len(hb["outer"]))
+    cams = add_preset_cameras(half, hero_xy=hero_xy)
     stats["tris_after"] = sum(tri_count(o) for o in export_objs)
     stats["objects"] = [o.name for o in export_objs]
 
