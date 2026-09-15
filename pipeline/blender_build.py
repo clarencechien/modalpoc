@@ -351,6 +351,21 @@ def point_in_poly(x, y, poly) -> bool:
     return c
 
 
+def near_poly(x, y, poly, tol=4.0) -> bool:
+    """Inside the polygon, or within `tol` metres of one of its edges."""
+    if point_in_poly(x, y, poly):
+        return True
+    n = len(poly)
+    for i in range(n):
+        (x1, y1), (x2, y2) = poly[i], poly[(i + 1) % n]
+        dx, dy = x2 - x1, y2 - y1
+        L2 = dx * dx + dy * dy
+        t = 0.0 if L2 == 0 else max(0.0, min(1.0, ((x - x1) * dx + (y - y1) * dy) / L2))
+        if math.hypot(x - (x1 + t * dx), y - (y1 + t * dy)) <= tol:
+            return True
+    return False
+
+
 def find_hero(site: dict, lat: float, lon: float):
     """Building containing (or nearest within 60 m to) the hero point."""
     from geo import lla_to_enu
@@ -497,6 +512,30 @@ def join_objects(objs, name):
 # ----------------------------------------------------------------------------- UV + bake
 
 
+def add_bake_uv(ob, name="BakeUV"):
+    """New UV layer for the bake atlas. The original layer stays the *render-active* one so
+    Image Texture nodes keep sampling the source textures; the new layer becomes *active*,
+    which is the layer smart_uv writes and the baker uses for the target image."""
+    me = ob.data
+    if me.uv_layers:
+        me.uv_layers[0].active_render = True
+    uv = me.uv_layers.new(name=name)
+    me.uv_layers.active = uv
+    return uv
+
+
+def finalize_bake_uv(ob, name="BakeUV"):
+    """After baking: make BakeUV the only UV layer so the exporter writes it as TEXCOORD_0."""
+    me = ob.data
+    if name not in me.uv_layers:
+        return
+    for uv in list(me.uv_layers):
+        if uv.name != name:
+            me.uv_layers.remove(uv)
+    me.uv_layers[name].active = True
+    me.uv_layers[name].active_render = True
+
+
 def smart_uv(ob, angle=66.0, margin=0.004):
     select_only([ob])
     bpy.ops.object.mode_set(mode="EDIT")
@@ -633,7 +672,7 @@ def add_preset_cameras(half: float, focus_z=12.0, hero_xy=(25.0, 0.0)):
         "View_NE": (r * 0.75, r * 0.75, half * 1.1),
         "View_NW": (-r * 0.75, r * 0.75, half * 1.1),
         "View_Top": (0.0, -1.0, half * 3.2),
-        "View_Street": (-half * 0.35, -half * 0.9, 2.0),
+        "View_Street": (hero_xy[0] - 62, hero_xy[1] - 12, 2.0),  # on the plaza west of the hero
         "View_HeroN": (hero_xy[0] + 10, hero_xy[1] + 110, 40.0),
         "View_HeroPlaza": (hero_xy[0] - 70, hero_xy[1] + 25, 3.0),
     }
@@ -646,6 +685,8 @@ def add_preset_cameras(half: float, focus_z=12.0, hero_xy=(25.0, 0.0)):
         target = Vector((0, 0, focus_z if name != "View_Street" else 2.0))  # street: look horizontally (OrbitControls clamps polar angle)
         if name.startswith("View_Hero"):
             target = Vector((hero_xy[0], hero_xy[1], 14.0 if name == "View_HeroN" else 3.0))
+        if name == "View_Street":
+            target = Vector((hero_xy[0], hero_xy[1], 2.0))
         ob.rotation_euler = (target - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
         cams.append(ob)
     bpy.context.scene.camera = cams[0]
@@ -693,7 +734,11 @@ def import_google_tiles(tiles_dir: Path, site: dict):
     imported = []
     for t in manifest["tiles"]:
         before = set(bpy.data.objects)
-        bpy.ops.import_scene.gltf(filepath=str(tiles_dir / t["file"]), merge_vertices=True)
+        try:
+            bpy.ops.import_scene.gltf(filepath=str(tiles_dir / t["file"]), merge_vertices=True)
+        except Exception as e:  # the importer occasionally trips on attribute merging; retry plain
+            log(f"import retry {t['file']}: {str(e)[:80]}")
+            bpy.ops.import_scene.gltf(filepath=str(tiles_dir / t["file"]), merge_vertices=False)
         new = [o for o in bpy.data.objects if o not in before and o.type == "MESH"]
         rtc = Vector(t.get("rtc_center") or (0, 0, 0))
         T = Matrix(t["transform"]) if t.get("transform") else Matrix.Identity(4)
@@ -715,8 +760,8 @@ def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument("--site", type=Path, required=True, help="site.json from fetch_opendata.py")
     ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--mode", choices=["opendata", "google3d"], default="opendata")
-    ap.add_argument("--tiles", type=Path, help="google3d: directory with manifest.json + *.glb")
+    ap.add_argument("--mode", choices=["opendata", "google3d", "nlsc"], default="opendata")
+    ap.add_argument("--tiles", type=Path, help="google3d/nlsc: directory with manifest.json + *.glb")
     ap.add_argument("--bake-res", type=int, default=4096)
     ap.add_argument("--ground-res", type=int, default=4096)
     ap.add_argument("--samples", type=int, default=64)
@@ -777,6 +822,72 @@ def main(argv):
             replace_materials(hero, baked_material("HeroBaked", img_h))
             decimate_to(hero, a.target_tris // 2, planar_first=False)
         decimate_to(buildings, a.target_tris // 2, planar_first=False)
+    elif a.mode == "nlsc":
+        # NLSC 全國三維建物 (分棟版): real footprints/heights, ortho roofs, generic facade textures.
+        ground = build_ground(site, site_dir)
+        parts = import_google_tiles(a.tiles, site)
+        blds = join_objects(parts, "Buildings")
+        select_only([blds])
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        # put the lowest building bases on the ground plane (flat site)
+        zs = sorted(v.co.z for v in blds.data.vertices)
+        z0 = zs[len(zs) // 50]
+        for v in blds.data.vertices:
+            v.co.z -= z0
+        clip_to_square(blds, half * 1.02)
+        stats["nlsc_ground_offset_m"] = round(z0, 2)
+        hero = None
+        hero_b = None if a.no_hero else find_hero(site, a.hero_lat, a.hero_lon)
+        if hero_b:
+            # separate the faces inside the hero footprint into their own object
+            select_only([blds])
+            bpy.ops.object.mode_set(mode="EDIT")
+            bpy.ops.mesh.select_all(action="DESELECT")
+            bpy.ops.object.mode_set(mode="OBJECT")
+            for poly in blds.data.polygons:
+                c = poly.center
+                poly.select = near_poly(c.x, c.y, hero_b["outer"], tol=4.0)
+            bpy.ops.object.mode_set(mode="EDIT")
+            bpy.ops.mesh.separate(type="SELECTED")
+            bpy.ops.object.mode_set(mode="OBJECT")
+            hero = next(o for o in bpy.context.selected_objects if o != blds)
+            hero.name = "Hero"
+            # photo-informed facade on the walls; keep the NLSC ortho texture on roofs
+            from hero import tile_glass_material
+            hero.data.materials.append(tile_glass_material("HeroFacade"))
+            wall_idx = len(hero.data.materials) - 1
+            for poly in hero.data.polygons:
+                if poly.normal.z < 0.5:
+                    poly.material_index = wall_idx
+            stats["hero"] = {"osm_id": hero_b["id"], "source": "nlsc", "tris": tri_count(hero)}
+            log(f"hero from NLSC tiles: {tri_count(hero)} tris")
+        export_objs = [o for o in (hero, blds, ground) if o]
+        stats["tris_before"] = sum(tri_count(o) for o in export_objs)
+        add_bake_uv(blds)
+        smart_uv(blds, angle=66.0, margin=0.003)
+        img_b = new_bake_image("bake_buildings", a.bake_res)
+        bake(blds, img_b, "COMBINED", a.samples)
+        finalize_bake_uv(blds)
+        if hero:
+            add_bake_uv(hero)
+            smart_uv(hero, angle=60.0, margin=0.002)
+            img_h = new_bake_image("bake_hero", a.hero_res)
+            bake(hero, img_h, "COMBINED", a.samples)
+            finalize_bake_uv(hero)
+        img_g = new_bake_image("bake_ground", a.ground_res)
+        bake(ground, img_g, "COMBINED", a.samples)
+        save_image(img_b, a.out / "bake_buildings.jpg")
+        save_image(img_g, a.out / "bake_ground.jpg")
+        replace_materials(blds, baked_material("BuildingsBaked", img_b))
+        replace_materials(ground, baked_material("GroundBaked", img_g))
+        if hero:
+            save_image(img_h, a.out / "bake_hero.jpg")
+            replace_materials(hero, baked_material("HeroBaked", img_h))
+        # drop the big NLSC source textures from the file so the export only carries the atlases
+        for im in list(bpy.data.images):
+            if im.name.startswith("Image"):
+                bpy.data.images.remove(im)
+        decimate_to(blds, a.target_tris, planar_first=False)
     else:
         parts = import_google_tiles(a.tiles, site)
         hi = join_objects(parts, "Tiles_hi")

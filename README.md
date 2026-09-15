@@ -62,12 +62,37 @@ cd web && python -m http.server 8080     # 開 http://localhost:8080/
 
 Google Photorealistic 3D Tiles 在此區只有 2.5D 貼圖地形（實測見 docs），所以 hero 不走 Google。
 
+## 國土測繪中心三維建物（`--mode nlsc`，目前建議的主路線）
+
+內政部國土測繪中心「多維度國家空間資訊服務平臺」免費提供全國三維建物的 OGC 3D Tiles / I3S 服務：
+
+| 服務 | 網址 |
+|---|---|
+| 服務清單（3D Tiles） | `https://3dtiles.nlsc.gov.tw/tiles3d/service` → `LAYERS.BUILDING[]` / `LAYERS.ROAD[]` |
+| 臺北市分棟版建物模型 | `https://3dtiles.nlsc.gov.tw/building/tiles3d/30/tileset.json`（3D Tiles 1.1，`contents[]`，GLB） |
+| 臺北市建物模型（合併版） | `https://3dtiles.nlsc.gov.tw/building/tiles3d/0/tileset.json` |
+| I3S 版 | `https://i3s.nlsc.gov.tw/building/i3s/SceneServer/layers/0` |
+
+`pipeline/fetch_tiles3d.py` 走訪 tileset（region/box/sphere 包圍盒、外部 tileset、transform 串接、b3dm→GLB），
+只抓與街區相交的 tile；`--mode nlsc` 匯入後裁切、把台達那棟的牆面換成照片修正版材質（屋頂保留 NLSC 的真實正射影像）、
+Cycles 光照 bake、匯出。瑞光路街區實測：63 片 tile、165 MB 原始貼圖 → 裁切後約 1 萬個三角形、3 張 4096² 貼圖。
+
+注意：`*.nlsc.gov.tw` 伺服器沒有送出 TWCA 中繼憑證，`pipeline/tls_tw.py` 會經由憑證的 AIA 補齊鏈（驗證不關閉）。
+Modal 容器可直連；本沙箱的 proxy 連不到 nlsc，故 `tools/nlsc_fetch_modal.py` 用 Modal 代抓到 `build/tiles_nlsc/`。
+
+```bash
+modal run pipeline/modal_app.py --mode nlsc --gpu l4 --samples 128     # 全流程（抓 tile + Blender）在 Modal
+modal run tools/nlsc_fetch_modal.py --half 150                           # 只抓 tile 到本機
+python pipeline/blender_build.py --site build/site/site.json --out build/out --mode nlsc --tiles build/tiles_nlsc
+```
+
 ## 兩條「高擬真」路線
 
 | 路線 | 幾何來源 | 擬真度 | 條件 |
 |---|---|---|---|
 | A. `web/live3dtiles.html` | Google Photorealistic 3D Tiles 串流 | 視 Google 涵蓋而定（**內湖此區實測只有 2.5D 貼圖地形**） | 開通 Map Tiles API；每次載入 = 1 個 root 請求（每月 1,000 次免費） |
 | B. `--mode google3d` | 同上，下載 → Blender 合併/裁切/decimate/重新 bake 成單一 GLB | 同上 | 同上；**但違反 Google Map Tiles 政策的「不得儲存/離線使用/擷取」條款**，僅供內部實驗 |
-| C. `--mode opendata`（預設） | OSM 輪廓 + 高度、NLSC 2024 正射影像、程序化立面 | 中（LOD1 + 真實地面） | 免 key、授權乾淨，可公開發佈 |
+| C. `--mode nlsc`（**建議**） | 國土測繪中心分棟版三維建物 + NLSC 正射影像 + 台達照片修正材質 | 高（真實幾何、真實屋頂） | 免 key、政府開放資料，可公開發佈 |
+| D. `--mode opendata` | OSM 輪廓 + 高度、NLSC 2024 正射影像、程序化立面 | 中（LOD1 + 真實地面） | 免 key、授權乾淨，可公開發佈 |
 
 細節與費用見 [docs/google-api-handbook.md](docs/google-api-handbook.md)。
