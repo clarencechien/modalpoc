@@ -14,14 +14,14 @@
     "floors": 9,
     "pv_panels": 266
   },
-  "tris_before": 17194,
-  "tris_after": 17194,
+  "tris_before": 17204,
+  "tris_after": 17204,
   "objects": [
     "Hero",
     "Buildings",
     "Ground"
   ],
-  "glb_bytes": 5339408,
+  "glb_bytes": 5163952,
   "cameras": [
     "View_SW",
     "View_SE",
@@ -109,9 +109,9 @@
         135.0
       ],
       "target": [
-        -9.07,
-        8.62,
-        23.33
+        0.0,
+        2.0,
+        0.0
       ],
       "fov": 58.7
     }
@@ -120,8 +120,8 @@
     "建物輪廓 © OpenStreetMap contributors (ODbL)",
     "正射影像 © 內政部國土測繪中心 (NLSC), 政府資料開放授權"
   ],
-  "seconds": 128.4,
-  "run_id": "20260915-032252",
+  "seconds": 126.4,
+  "run_id": "20260915-032904",
   "seconds_fetch": 0.0,
-  "seconds_total": 137.2
+  "seconds_total": 135.3
 }

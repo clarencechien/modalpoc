@@ -641,7 +641,7 @@ def add_preset_cameras(half: float, focus_z=12.0):
         cam.clip_end = 5000
         ob = link(bpy.data.objects.new(name, cam))
         ob.location = loc
-        target = Vector((0, 0, focus_z if name != "View_Street" else 10.0))
+        target = Vector((0, 0, focus_z if name != "View_Street" else 2.0))  # street: look horizontally (OrbitControls clamps polar angle)
         ob.rotation_euler = (target - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
         cams.append(ob)
     bpy.context.scene.camera = cams[0]
