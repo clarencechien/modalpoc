@@ -20,7 +20,10 @@ docs/google-api-handbook.md   必須開通的 Google API、Key 限制、費用�
 ```
 
 ![SW 視角](docs/img/preview_View_SW.png)
-![街景視角](docs/img/preview_View_Street.png)
+![台達總部（NLSC 幾何 + 照片修正材質）](docs/img/preview_View_HeroN.png)
+
+`web/assets/scene.glb` 現在是 **NLSC 分棟版建物** 的成品（`--mode nlsc`）；OSM/LOD1 版保留為
+`web/assets/scene_opendata.glb`，在 viewer 用 `index.html?glb=assets/scene_opendata.glb&stats=assets/stats_opendata.json` 切換。
 
 ## 快速開始
 

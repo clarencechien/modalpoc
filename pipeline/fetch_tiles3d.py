@@ -62,6 +62,57 @@ def bounding_sphere(bv: dict, m: list) -> tuple[tuple[float, float, float], floa
     raise ValueError(f"unknown boundingVolume {bv}")
 
 
+def sanitize_glb(data: bytes, drop_prefixes=("_",), drop_attrs=("TEXCOORD_1",), drop_ext_prefixes=("EXT_texture_bound", "EXT_mesh_features", "EXT_structural_metadata")) -> bytes:
+    """Strip vendor attributes/extensions (NLSC/PilotGaea `_TEXBOUND_0`, `_FEATURE_ID_0`, EXT_*) that trip
+    Blender 4.2.x's importer. Geometry, TEXCOORD_0 and textures are untouched; buffers stay as they are."""
+    if data[:4] != b"glTF":
+        return data
+    total = struct.unpack_from("<I", data, 8)[0]
+    jl, jt = struct.unpack_from("<II", data, 12)
+    js = json.loads(data[20:20 + jl].decode("utf-8"))
+    rest = data[20 + jl:total]
+    changed = False
+    for mesh in js.get("meshes", []):
+        for prim in mesh.get("primitives", []):
+            attrs = prim.get("attributes", {})
+            for k in list(attrs):
+                if k.startswith(drop_prefixes) or k in drop_attrs:
+                    attrs.pop(k); changed = True
+            if "extensions" in prim:
+                for e in list(prim["extensions"]):
+                    if e.startswith(drop_ext_prefixes):
+                        prim["extensions"].pop(e); changed = True
+    for mat in js.get("materials", []):
+        pbr = mat.get("pbrMetallicRoughness", {})
+        for slot in ("baseColorTexture", "metallicRoughnessTexture"):
+            t = pbr.get(slot)
+            if t and "extensions" in t:
+                for e in list(t["extensions"]):
+                    if e.startswith(drop_ext_prefixes):
+                        t["extensions"].pop(e); changed = True
+                if not t["extensions"]:
+                    t.pop("extensions")
+    for key in ("extensionsUsed", "extensionsRequired"):
+        if key in js:
+            kept = [e for e in js[key] if not e.startswith(drop_ext_prefixes)]
+            if len(kept) != len(js[key]):
+                js[key] = kept; changed = True
+            if not js[key]:
+                js.pop(key)
+    if "extensions" in js:
+        for e in list(js["extensions"]):
+            if e.startswith(drop_ext_prefixes):
+                js["extensions"].pop(e); changed = True
+        if not js["extensions"]:
+            js.pop("extensions")
+    if not changed:
+        return data
+    body = json.dumps(js, separators=(",", ":")).encode("utf-8")
+    body += b" " * ((4 - len(body) % 4) % 4)
+    out = b"glTF" + struct.pack("<II", 2, 12 + 8 + len(body) + len(rest)) + struct.pack("<II", len(body), jt) + body + rest
+    return out
+
+
 def unwrap_b3dm(data: bytes) -> tuple[bytes, list | None, dict]:
     magic = data[:4]
     if magic == b"glTF":
@@ -157,6 +208,7 @@ def fetch_tiles(tileset_url: str, lat: float, lon: float, half_size_m: float, ou
 
 def _save_tile(glb, rtc, meta, m, ge, url, out_dir, tiles, copyrights):
         name = f"tile_{len(tiles):05d}.glb"
+        glb = sanitize_glb(glb)
         (out_dir / name).write_bytes(glb)
         # glb asset.copyright
         try:

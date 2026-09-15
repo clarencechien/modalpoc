@@ -732,13 +732,22 @@ def import_google_tiles(tiles_dir: Path, site: dict):
     # 3D Tiles glTF content is Y-up; tiles are in ECEF Z-up: rotate X by +90deg.
     yup_to_zup = Matrix.Rotation(math.radians(90.0), 4, "X")
     imported = []
+    from fetch_tiles3d import sanitize_glb
+    clean_dir = tiles_dir / "_clean"
+    clean_dir.mkdir(exist_ok=True)
     for t in manifest["tiles"]:
         before = set(bpy.data.objects)
+        src = tiles_dir / t["file"]
+        raw = src.read_bytes()
+        clean = sanitize_glb(raw)
+        if clean is not raw:
+            src = clean_dir / t["file"]
+            src.write_bytes(clean)
         try:
-            bpy.ops.import_scene.gltf(filepath=str(tiles_dir / t["file"]), merge_vertices=True)
+            bpy.ops.import_scene.gltf(filepath=str(src), merge_vertices=True)
         except Exception as e:  # the importer occasionally trips on attribute merging; retry plain
             log(f"import retry {t['file']}: {str(e)[:80]}")
-            bpy.ops.import_scene.gltf(filepath=str(tiles_dir / t["file"]), merge_vertices=False)
+            bpy.ops.import_scene.gltf(filepath=str(src), merge_vertices=False)
         new = [o for o in bpy.data.objects if o not in before and o.type == "MESH"]
         rtc = Vector(t.get("rtc_center") or (0, 0, 0))
         T = Matrix(t["transform"]) if t.get("transform") else Matrix.Identity(4)
