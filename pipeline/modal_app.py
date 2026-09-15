@@ -41,7 +41,7 @@ image = (
         "mkdir -p /opt/blender && tar -xJf /tmp/blender.tar.xz -C /opt/blender --strip-components=1 && rm /tmp/blender.tar.xz",
         "/opt/blender/blender --version",
     )
-    .pip_install("requests==2.32.3", "pillow==10.4.0", "cryptography==43.0.1")
+    .pip_install("requests==2.32.3", "pillow==10.4.0", "cryptography==43.0.1", "numpy==1.26.4")
     .add_local_dir(str(PIPELINE_DIR), REMOTE_PIPELINE)
 )
 
@@ -102,6 +102,12 @@ def _build_impl(cfg: dict, site_files: dict | None = None) -> dict:
         tiles_dir = work / "tiles"
         fetch_tiles(cfg.get("nlsc_url") or NLSC_TAIPEI_BUILDINGS, cfg["lat"], cfg["lon"], cfg["half_size"], tiles_dir, verify=make_bundle())
         args += ["--tiles", str(tiles_dir)]
+        # the curtain-wall photo texture needs PIL, which portable Blender lacks: rectify here first
+        photo = Path(REMOTE_PIPELINE) / "data" / "delta_hq_commons_2011.jpg"
+        if photo.exists():
+            from photo_facade import rectify
+            out_dir.mkdir(parents=True, exist_ok=True)
+            rectify(photo, out_dir / "facade_arc.jpg")
     if cfg["mode"] == "google3d":
         from fetch_google3d import fetch_tiles
         key = os.environ.get("GOOGLE_MAPS_API_KEY") or cfg.get("google_key")

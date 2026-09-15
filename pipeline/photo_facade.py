@@ -14,18 +14,21 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-import numpy as np
-from PIL import Image
+try:
+    import numpy as np
+    from PIL import Image
+except ImportError:  # constants (Z_TOP/Z_BOT) are still importable inside Blender
+    np = Image = None
 
 PICK_W = 1920
 # (x, y) along the top parapet of the glass block, left (east end) -> right (west end)
 TOP = [(195, 748), (300, 716), (400, 692), (500, 680), (600, 673), (700, 670), (800, 672), (900, 680),
-       (1000, 691), (1100, 706), (1150, 716), (1180, 722)]
+       (1000, 691), (1060, 698)]
 # the lowest fully visible band (top of the ground floor)
 BOT = [(195, 1232), (300, 1228), (400, 1218), (500, 1212), (600, 1207), (700, 1205), (800, 1205), (900, 1203),
-       (1000, 1195), (1100, 1185), (1150, 1178), (1180, 1174)]
-X_LEFT, X_RIGHT = 195, 1180
-HALF_ANGLE_DEG = 50.0      # half of the arc's angular span as seen in the photo (circle fit: 60..159 deg = 99 deg)
+       (1000, 1195), (1060, 1190)]
+X_LEFT, X_RIGHT = 195, 1060
+HALF_ANGLE_DEG = 48.0      # half of the arc's angular span as seen in the photo (circle fit: 60..159 deg = 99 deg)
 Z_TOP, Z_BOT = 24.0, 3.4   # metres: parapet of the glass block, top of the ground floor
 
 

@@ -713,7 +713,7 @@ def add_preset_cameras(half: float, focus_z=12.0, hero_xy=(25.0, 0.0)):
         "View_Top": (0.0, -1.0, half * 3.2),
         "View_Street": (hero_xy[0] - 62, hero_xy[1] - 12, 2.0),  # on the plaza west of the hero
         "View_HeroN": (hero_xy[0] + 10, hero_xy[1] + 110, 40.0),
-        "View_HeroPlaza": (hero_xy[0] - 30, hero_xy[1] + 38, 3.0),  # on the plaza north-west of the arc
+        "View_HeroPlaza": (hero_xy[0] - 40, hero_xy[1] + 18, 3.0),  # on the plaza west of the arc, north of the pavilion
     }
     for name, loc in presets.items():
         cam = bpy.data.cameras.new(name)
@@ -906,10 +906,15 @@ def main(argv):
             from hero import tile_glass_material
             arc_photo = None
             photo = Path(__file__).resolve().parent / "data" / "delta_hq_commons_2011.jpg"
-            if photo.exists() and not a.no_arc_photo:
-                from photo_facade import rectify, Z_TOP, Z_BOT
-                tex_path = a.out / "facade_arc.jpg"
-                rectify(photo, tex_path)
+            tex_path = a.out / "facade_arc.jpg"
+            if photo.exists() and not a.no_arc_photo and not tex_path.exists():
+                try:  # needs PIL/numpy: available with the bpy wheel, not inside a portable Blender
+                    from photo_facade import rectify
+                    rectify(photo, tex_path)
+                except Exception as e:
+                    log(f"arc photo rectification skipped ({e}); run photo_facade.py beforehand")
+            if tex_path.exists() and not a.no_arc_photo:
+                from photo_facade import Z_TOP, Z_BOT
                 arc = fit_arc(hero_b["outer"])
                 arc_photo = {"image": tex_path, **arc, "z_bot": Z_BOT, "z_top": Z_TOP}
                 stats["arc_photo"] = {k: (str(v) if isinstance(v, Path) else v) for k, v in arc_photo.items()}
