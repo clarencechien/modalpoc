@@ -150,3 +150,29 @@ Modal 新帳號每月有免費額度（目前 US$30/月），這個專案的用�
 | `This API project is not authorized to use this API` / 403 且無 JSON | 沒綁計費帳戶或 referrer 限制不符 | 步驟 2、3 |
 | `REQUEST_DENIED: This API is not activated` | Geocoding/Elevation 未啟用 | 不需要就忽略 |
 | 串流頁載入後畫面全黑 | root.json 成功但 referrer 限制擋掉子磁磚請求 | 把 referrer 規則改成 `http://localhost:*/*` 或加上你的網域 |
+
+
+## 5. 照片 / 街景實驗（2026-09-15）
+
+### 用到的資料
+
+| 來源 | 內容 | 授權 |
+|---|---|---|
+| Wikimedia Commons `File:Delta Electronics headquarters 20110201.jpg` | 台達總部正面照（粉棕色花崗岩磁磚＋方窗、北側弧形藍綠玻璃帷幕、西側塔樓與三角形 DELTA 招牌） | CC BY-SA 3.0 |
+| Map Tiles API — Street View Tiles | 台達周邊 13 張全景（7 張 Google 2022–2025、6 張使用者上傳），zoom 3 = 4096×2048 | Google 條款；每片 tile 計入 Street View Tiles SKU（每月 100,000 片免費，本次約 420 片） |
+
+`pipeline/streetview.py`：createSession(streetview) → panoIds（POST）→ metadata → z/x/y tiles 拼接。
+`pipeline/hero_photo.py` + `pipeline/build_photo_hero.py`：把每張全景當 Environment Texture，
+依「著色點 − 全景位置」的方向取樣、以 `heading − 90°` 轉到 Blender 的等距柱狀慣例（中心 = +X、順時針），
+權重 = 面向程度³ × 距離⁻³，烘焙成 hero 的 DIFFUSE 貼圖；並用等距柱狀相機從全景位置渲染做對位驗證。
+
+### 結果與判斷
+
+- **對位正確**：從全景位置渲染的驗證圖，台達出現的方位與原始全景一致。
+- **貼圖品質不可用**：街景裡台達前方有整排行道樹，投影後樹葉、天空、路牌全糊在立面上；
+  多張全景混合會鬼影；LOD1 高度（OSM 9 層 × 3.3 m）與實際（照片估約 25 m）有落差，樓層線對不上。
+  要真的用街景貼圖，需要每張全景的可見性/遮蔽判斷（或深度）與精確幾何，這已是攝影測量的範疇。
+- **可用的部份**：Commons 照片讓程序化 hero 的外觀貼近真實（磁磚＋方窗、北側弧形帷幕與深色水平帶、
+  塔樓＋招牌），這個版本不含任何 Google 內容，可以公開發佈。
+- **條款**：Street View 影像同樣受 Map Tiles 政策約束（須顯示 copyright、不得儲存/離線使用），
+  街景貼圖版本只保留在本機 `build/` 實驗，不進 repo、不上 Pages。

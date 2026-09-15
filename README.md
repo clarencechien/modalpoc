@@ -50,8 +50,12 @@ cd web && python -m http.server 8080     # 開 http://localhost:8080/
 
 ## 台達總部（hero）與其他建物
 
-- **Hero**（`pipeline/hero.py`）：OSM 弧形輪廓（`w343901574`，9 層 30.7 m）→ 帷幕玻璃主體、每層外挑樓板、女兒牆、
-  屋頂太陽能板陣列（南向 15°）、機房/樓梯間、綠屋頂、廣場玻璃圓亭；獨占一張 4096² bake 貼圖。
+- **Hero**（`pipeline/hero.py`）：OSM 弧形輪廓（`w343901574`，9 層）→ 依 Wikimedia Commons 照片（CC BY-SA 3.0）
+  重現外觀：粉棕色花崗岩磁磚＋方窗、北側弧形藍綠玻璃帷幕＋深色水平帶（7 層）、西側塔樓＋三角形 DELTA 招牌、
+  女兒牆、屋頂太陽能板陣列、機房、綠屋頂、廣場玻璃圓亭；獨占一張 4096² bake 貼圖。
+- **街景投影實驗**（`pipeline/streetview.py`、`hero_photo.py`、`build_photo_hero.py`）：把 Google Street View 全景投影到
+  hero 上烘焙。方向對位正確，但行道樹遮蔽與幾何落差讓貼圖糊掉，且受 Google 條款限制，只留在本機 `build/`，
+  詳見 docs 第 5 節。
 - **其他建物**：LOD1 擠出 + 女兒牆 + 屋頂水箱，依 OSM `building` 標籤選玻璃辦公/一般辦公/公寓三種程序化立面，
   合併成一個 mesh、共用一張 4096² 貼圖（遊戲風：有質感、不細節）。
 - **地面**：NLSC 2024 正射影像 + 建物投影（太陽方位對齊正射影像原本的陰影）。

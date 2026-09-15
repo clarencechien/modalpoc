@@ -16,7 +16,7 @@ from mathutils import Vector
 
 FLOOR_H = 3.4
 SLAB_H = 0.7
-SLAB_OUT = 0.55
+SLAB_OUT = 0.25
 
 
 def point_in_poly(x, y, poly) -> bool:
@@ -85,6 +85,65 @@ def glass_material(name="HeroGlass"):
     return m
 
 
+def tile_glass_material(name="HeroFacade", glass_floors=7):
+    """Delta HQ look (Commons photo 2011): pink-brown granite tile with punched windows; the
+    north-facing arc is a teal curtain wall with dark horizontal bands, up to `glass_floors`."""
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    geo = nt.nodes.new("ShaderNodeNewGeometry")
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ"); nt.links.new(geo.outputs["Position"], sep.inputs[0])
+    nsep = nt.nodes.new("ShaderNodeSeparateXYZ"); nt.links.new(geo.outputs["True Normal"], nsep.inputs[0])
+
+    def M(op, a, b=None, clamp=False):
+        n = nt.nodes.new("ShaderNodeMath"); n.operation = op; n.use_clamp = clamp
+        (nt.links.new(a, n.inputs[0]) if not isinstance(a, (int, float)) else n.inputs.__setitem__(0, a) if False else None)
+        if isinstance(a, (int, float)): n.inputs[0].default_value = a
+        else: nt.links.new(a, n.inputs[0])
+        if b is not None:
+            if isinstance(b, (int, float)): n.inputs[1].default_value = b
+            else: nt.links.new(b, n.inputs[1])
+        return n.outputs[0]
+
+    def band(inp, period, lo, hi):
+        f = M("FRACT", M("DIVIDE", inp, period))
+        return M("MULTIPLY", M("GREATER_THAN", f, lo), M("LESS_THAN", f, hi))
+
+    # along-facade coordinate
+    along = M("SUBTRACT", M("MULTIPLY", sep.outputs["Y"], nsep.outputs["X"]), M("MULTIPLY", sep.outputs["X"], nsep.outputs["Y"]))
+    # --- tile facade with punched windows (1.5 m wide x 1.7 m tall, every 3.0 m / floor)
+    win = M("MULTIPLY", band(sep.outputs["Z"], FLOOR_H, 0.30, 0.80), band(along, 3.0, 0.20, 0.70))
+    tile_noise = nt.nodes.new("ShaderNodeTexNoise"); tile_noise.inputs["Scale"].default_value = 4.0
+    tile_ramp = nt.nodes.new("ShaderNodeValToRGB")
+    tile_ramp.color_ramp.elements[0].color = (0.30, 0.20, 0.18, 1)
+    tile_ramp.color_ramp.elements[1].color = (0.42, 0.30, 0.27, 1)
+    nt.links.new(tile_noise.outputs["Fac"], tile_ramp.inputs["Fac"])
+    grout = M("MAXIMUM", band(sep.outputs["Z"], 0.6, 0.0, 0.05), band(along, 0.6, 0.0, 0.05))
+    grout_c = nt.nodes.new("ShaderNodeRGB"); grout_c.outputs[0].default_value = (0.22, 0.16, 0.15, 1)
+    tile_mix = nt.nodes.new("ShaderNodeMix"); tile_mix.data_type = "RGBA"
+    nt.links.new(grout, tile_mix.inputs["Factor"]); nt.links.new(tile_ramp.outputs["Color"], tile_mix.inputs[6]); nt.links.new(grout_c.outputs[0], tile_mix.inputs[7])
+    win_c = nt.nodes.new("ShaderNodeRGB"); win_c.outputs[0].default_value = (0.10, 0.20, 0.22, 1)
+    tile_facade = nt.nodes.new("ShaderNodeMix"); tile_facade.data_type = "RGBA"
+    nt.links.new(win, tile_facade.inputs["Factor"]); nt.links.new(tile_mix.outputs[2], tile_facade.inputs[6]); nt.links.new(win_c.outputs[0], tile_facade.inputs[7])
+    # --- teal curtain wall: dark band 0.9 m per floor + thin mullions every 1.4 m
+    dark = M("MAXIMUM", band(sep.outputs["Z"], FLOOR_H, 0.0, 0.26), band(along, 1.4, 0.0, 0.04))
+    glass_c = nt.nodes.new("ShaderNodeRGB"); glass_c.outputs[0].default_value = (0.16, 0.42, 0.40, 1)
+    band_c = nt.nodes.new("ShaderNodeRGB"); band_c.outputs[0].default_value = (0.04, 0.16, 0.16, 1)
+    glass_facade = nt.nodes.new("ShaderNodeMix"); glass_facade.data_type = "RGBA"
+    nt.links.new(dark, glass_facade.inputs["Factor"]); nt.links.new(glass_c.outputs[0], glass_facade.inputs[6]); nt.links.new(band_c.outputs[0], glass_facade.inputs[7])
+    # --- selector: north-facing (ny > 0.15) and below glass_floors
+    is_glass = M("MULTIPLY", M("GREATER_THAN", nsep.outputs["Y"], 0.15), M("LESS_THAN", sep.outputs["Z"], glass_floors * FLOOR_H))
+    final = nt.nodes.new("ShaderNodeMix"); final.data_type = "RGBA"
+    nt.links.new(is_glass, final.inputs["Factor"]); nt.links.new(tile_facade.outputs[2], final.inputs[6]); nt.links.new(glass_facade.outputs[2], final.inputs[7])
+    nt.links.new(final.outputs[2], bsdf.inputs["Base Color"])
+    rough = nt.nodes.new("ShaderNodeMix"); rough.data_type = "FLOAT"; rough.inputs[2].default_value = 0.7; rough.inputs[3].default_value = 0.12
+    nt.links.new(M("MAXIMUM", is_glass, win), rough.inputs["Factor"]); nt.links.new(rough.outputs[0], bsdf.inputs["Roughness"])
+    met = nt.nodes.new("ShaderNodeMix"); met.data_type = "FLOAT"; met.inputs[2].default_value = 0.0; met.inputs[3].default_value = 0.3
+    nt.links.new(is_glass, met.inputs["Factor"]); nt.links.new(met.outputs[0], bsdf.inputs["Metallic"])
+    return m
+
+
 def pv_material(name="HeroPV"):
     m = bpy.data.materials.new(name)
     m.use_nodes = True
@@ -128,13 +187,15 @@ def green_material(name="HeroGreenRoof"):
 
 def hero_materials():
     return [
-        glass_material(),                                   # 0 curtain wall
-        _mat("HeroSlab", (0.60, 0.59, 0.56), 0.75),          # 1 floor slabs / parapet
+        tile_glass_material(),                              # 0 facade (tile + north arc glass)
+        _mat("HeroSlab", (0.05, 0.17, 0.17), 0.5, 0.2),      # 1 dark bands on the arc / parapet
         _mat("HeroRoof", (0.36, 0.36, 0.35), 0.9),           # 2 roof deck
         pv_material(),                                      # 3 PV panels
         _mat("HeroMech", (0.62, 0.63, 0.64), 0.6, 0.3),      # 4 plant rooms / AHUs
         green_material(),                                   # 5 green roof
         _mat("HeroPlaza", (0.66, 0.65, 0.62), 0.6),          # 6 pavilion roof
+        _mat("HeroSign", (0.05, 0.22, 0.30), 0.3, 0.4),      # 7 DELTA pyramid sign
+        _mat("HeroTile", (0.36, 0.25, 0.23), 0.7),           # 8 tower tile
     ]
 
 
@@ -203,11 +264,31 @@ def build_hero(footprint: list[list[float]], height: float, name="Hero", seed=7,
     H = n_floors * FLOOR_H
     bm = bmesh.new()
 
-    # 1) glass mass (full height, no outset)
+    # 1) main mass (full height)
     _add_prism(bm, poly, 0.0, H, 0)
-    # 2) floor slabs projecting past the glass, and the roof slab
-    for k in range(1, n_floors + 1):
-        _add_prism(bm, poly, k * FLOOR_H - SLAB_H, SLAB_H, 1, outset=SLAB_OUT)
+    # 2) dark band slabs only along the north-facing arc (the curtain-wall part), 7 floors
+    n = len(poly)
+    north = []
+    for i in range(n):
+        (x1, y1), (x2, y2) = poly[i], poly[(i + 1) % n]
+        ex, ey = x2 - x1, y2 - y1
+        nx, ny = ey, -ex  # outward normal of a CCW ring
+        north.append(ny / (math.hypot(nx, ny) + 1e-9) > 0.15)
+    # longest run of north-facing edges -> vertex chain
+    best, cur, start = (0, 0), 0, 0
+    for i in range(2 * n):
+        if north[i % n]:
+            cur += 1
+            if cur > best[0]:
+                best = (cur, i - cur + 1)
+        else:
+            cur = 0
+    run, s0 = best
+    if run >= 2:
+        chain = [poly[(s0 + k) % n] for k in range(run + 1)]
+        if len(chain) >= 3:
+            for k in range(1, min(n_floors, 7) + 1):
+                _add_prism(bm, chain, k * FLOOR_H - SLAB_H, SLAB_H, 1, outset=SLAB_OUT)
     # 3) parapet ring on the roof (0.35 m outside the glass line, 0.4 m wide, 1.1 m high)
     _add_prism(bm, poly, H, 1.1, 1, outset=0.35, ring=0.75)
     # roof deck: fill the parapet interior
@@ -253,6 +334,18 @@ def build_hero(footprint: list[list[float]], height: float, name="Hero", seed=7,
     if len(gpts) == 4:
         f = bm.faces.new([bm.verts.new((x, y, H + 0.08)) for x, y in gpts])
         f.material_index = 5
+
+    # 4b) west tower with the pyramid DELTA sign (Commons photo)
+    wx = sorted(poly, key=lambda p: p[0])[:4]
+    tx, ty = sum(p[0] for p in wx) / 4 + 6.0, sum(p[1] for p in wx) / 4
+    if all(point_in_poly(tx + dx, ty + dy, poly) for dx in (-5, 5) for dy in (-5, 5)):
+        sq = [(tx - 5, ty - 5), (tx + 5, ty - 5), (tx + 5, ty + 5), (tx - 5, ty + 5)]
+        _add_prism(bm, sq, 0.0, H + 7.0, 8)
+        apex = bm.verts.new((tx, ty, H + 7.0 + 9.0))
+        base = [bm.verts.new((x, y, H + 7.0)) for x, y in ((tx - 4, ty - 4), (tx + 4, ty - 4), (tx + 4, ty + 4), (tx - 4, ty + 4))]
+        for i in range(4):
+            f = bm.faces.new((base[i], base[(i + 1) % 4], apex)); f.material_index = 7
+        fb = bm.faces.new(base[::-1]); fb.material_index = 7
 
     # 5) plaza pavilion: glass cylinder with a flat roof disc
     px, py, pr, ph = pavilion
